@@ -1,8 +1,13 @@
 # cogno-observability
 
-SRE/Ops monitoring for the Cogno stack: a **Prometheus metrics sink** + **`/metrics` wiring** +
-**Grafana dashboards / alert rules**. This is the *operator-facing* pillar — cross-tenant fleet
-health — and is deliberately **separate** from two other consumers of the same turn data:
+**SRE/Ops monitoring for the [Cogno](https://github.com/sudoers-ai/cogno-anima) stack** — a Prometheus metrics sink + `/metrics` wiring + Grafana dashboards/alerts, plus a one-login deploy stack for metrics **and** live logs.
+
+Where [`cogno-anima`](https://github.com/sudoers-ai/cogno-anima) is the *mind* and [`cogno-homeo`](https://github.com/sudoers-ai/cogno-homeo) keeps the calls *alive*, `cogno-observability` is the **operator's eyes** on the running fleet — how many turns, how fast, how much they cost, where they fail. It attaches to the host from *outside* its cognition, so the host never imports `prometheus_client`.
+
+> Status: **alpha** — metrics sink + `/metrics` wiring + deploy stack + unit/contract suite in place.
+
+SRE/Ops monitoring is the *operator-facing* pillar — cross-tenant fleet health — and is
+deliberately **separate** from two other consumers of the same turn data:
 
 | Surface | Audience | This repo? |
 |---|---|---|
@@ -76,5 +81,31 @@ time. Without it, single-process mode is used.
 
 - `alerts/cogno_rules.yml` — Prometheus recording + alerting rules.
 - `dashboards/cogno_overview.json` — Grafana dashboard (import, pick your Prometheus datasource).
+- `dashboards/cogno_logs.json` — Grafana dashboard for live logs (Loki).
 - `prometheus-scrape.example.yml` — scrape config / ServiceMonitor example.
 - `SLOs.md` — starting SLOs + a metric→runbook map.
+
+## Deploy — one Grafana login for metrics + logs
+
+`deploy/` is a docker-compose stack (Prometheus + Loki + Promtail + Grafana) that watches an
+existing host and gives you **one Grafana login** to follow it live — metrics and near-real-time
+logs on the same pane. See [`deploy/README.md`](deploy/README.md).
+
+## Host integration
+
+The host exposes two seams (`metrics_sink=` + `instrument(app)`) and stays prometheus-agnostic;
+this library fills them. See [`docs/HOST_INTEGRATION.md`](docs/HOST_INTEGRATION.md).
+
+## The Cogno ecosystem
+
+`cogno-observability` is one organ of **[Cogno](https://github.com/sudoers-ai)** — a family of
+small, composable, Apache-2.0 libraries that together form a complete conversational-agent
+platform. Each library owns a single concern and stays infra-agnostic; a **host** assembles them
+into a running agent:
+
+![The Cogno ecosystem](docs/assets/cogno-ecosystem.svg)
+
+The open-source libraries are the organs; the **host is the body** that joins them. Our reference
+host — `cogno-host`, with its `cogno-ui` dashboard — is the private product layer, but it holds no
+special powers: everything it does rides on the public seams documented in each library's
+`docs/HOST_INTEGRATION.md`.

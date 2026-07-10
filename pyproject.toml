@@ -21,9 +21,11 @@ http = ["prometheus-fastapi-instrumentator>=7.0"]
 dev = [
     "pytest>=8",
     "pytest-asyncio>=0.23",
+    "pytest-cov>=5.0",
     "prometheus-fastapi-instrumentator>=7.0",
     "fastapi>=0.110",
     "httpx>=0.27",
+    "ruff>=0.5",
     "mypy>=1.8",
 ]
 
@@ -33,3 +35,16 @@ include = ["cogno_observability*"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]
+
+[tool.mypy]
+python_version = "3.10"
+ignore_missing_imports = true
+files = ["cogno_observability"]
+warn_unused_ignores = true
