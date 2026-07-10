@@ -1,0 +1,139 @@
+{
+  "title": "Cogno — Pipeline Overview",
+  "uid": "cogno-overview",
+  "tags": ["cogno", "sre"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-6h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "datasource",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": {},
+        "hide": 0,
+        "label": "Prometheus"
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Turns / sec",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 7, "w": 8, "x": 0, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
+      "targets": [
+        { "expr": "sum(rate(cogno_turns_total[5m])) by (route)", "legendFormat": "{{route}}", "refId": "A" }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Error ratio (5m)",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 7, "w": 4, "x": 8, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "green", "value": null },
+            { "color": "orange", "value": 0.02 },
+            { "color": "red", "value": 0.05 }
+          ] }
+        },
+        "overrides": []
+      },
+      "targets": [ { "expr": "cogno:error_ratio:rate5m", "refId": "A" } ]
+    },
+    {
+      "id": 3,
+      "title": "p95 turn latency",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 7, "w": 4, "x": 12, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "green", "value": null },
+            { "color": "orange", "value": 10 },
+            { "color": "red", "value": 30 }
+          ] }
+        },
+        "overrides": []
+      },
+      "targets": [ { "expr": "cogno:turn_latency_p95:5m", "refId": "A" } ]
+    },
+    {
+      "id": 4,
+      "title": "Provider spend (USD/h)",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 7, "w": 4, "x": 16, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "currencyUSD" }, "overrides": [] },
+      "targets": [ { "expr": "cogno:cost_usd:rate1h", "refId": "A" } ]
+    },
+    {
+      "id": 5,
+      "title": "Turns by stop_reason",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 7, "w": 4, "x": 20, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
+      "targets": [
+        { "expr": "sum(rate(cogno_turns_total[5m])) by (stop_reason)", "legendFormat": "{{stop_reason}}", "refId": "A" }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "p95 latency by stage",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 7 },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "targets": [
+        { "expr": "histogram_quantile(0.95, sum(rate(cogno_stage_duration_seconds_bucket[5m])) by (le, stage))", "legendFormat": "{{stage}}", "refId": "A" }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Tokens / sec by stage",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 7 },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "targets": [
+        { "expr": "sum(rate(cogno_stage_tokens_total[5m])) by (stage)", "legendFormat": "{{stage}}", "refId": "A" }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "Reliability ratios",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 15 },
+      "fieldConfig": { "defaults": { "unit": "percentunit" }, "overrides": [] },
+      "targets": [
+        { "expr": "cogno:block_ratio:rate5m", "legendFormat": "blocked", "refId": "A" },
+        { "expr": "cogno:handoff_ratio:rate5m", "legendFormat": "handoff", "refId": "B" },
+        { "expr": "cogno:tool_failure_ratio:rate5m", "legendFormat": "tool_failure", "refId": "C" }
+      ]
+    },
+    {
+      "id": 9,
+      "title": "Drift actions / sec",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 15 },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "targets": [
+        { "expr": "sum(rate(cogno_drift_actions_total[5m])) by (action)", "legendFormat": "{{action}}", "refId": "A" }
+      ]
+    }
+  ]
+}

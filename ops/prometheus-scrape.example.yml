@@ -1,0 +1,21 @@
+# Example Prometheus scrape config for a cogno-host deployment.
+# Merge into your prometheus.yml. The host exposes /metrics (mounted by cogno_observability.attach).
+scrape_configs:
+  - job_name: cogno-host
+    metrics_path: /metrics
+    scrape_interval: 15s
+    static_configs:
+      - targets: ["cogno-host:8000"]
+        labels:
+          env: prod
+    # /metrics is intentionally NOT behind the admin auth or the rate limiter (like /health),
+    # but you SHOULD firewall it to the Prometheus network — it is operator data, not tenant data.
+
+# In Kubernetes prefer a ServiceMonitor (prometheus-operator) selecting the host Service:
+#
+#   apiVersion: monitoring.coreos.com/v1
+#   kind: ServiceMonitor
+#   metadata: { name: cogno-host }
+#   spec:
+#     selector: { matchLabels: { app: cogno-host } }
+#     endpoints: [ { port: http, path: /metrics, interval: 15s } ]

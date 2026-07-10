@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cogno-observability"
+version = "0.1.0"
+description = "SRE/Ops monitoring for the Cogno stack — Prometheus metrics sink + /metrics wiring + Grafana dashboards/alerts. Cross-tenant fleet health (NOT the tenant-facing Radar Tokens; NOT billing)."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Apache-2.0" }
+authors = [{ name = "Cogno" }]
+dependencies = [
+    "prometheus-client>=0.20",
+]
+
+[project.optional-dependencies]
+# The FastAPI HTTP-layer instrumentation (RED metrics per route) is optional: the business
+# metrics (per-turn TurnEvent) work without it.
+http = ["prometheus-fastapi-instrumentator>=7.0"]
+dev = [
+    "pytest>=8",
+    "pytest-asyncio>=0.23",
+    "prometheus-fastapi-instrumentator>=7.0",
+    "fastapi>=0.110",
+    "httpx>=0.27",
+    "mypy>=1.8",
+]
+
+[tool.setuptools.packages.find]
+include = ["cogno_observability*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

@@ -1,0 +1,106 @@
+# Prometheus recording + alerting rules for the Cogno pipeline.
+#
+# Load via prometheus.yml:
+#   rule_files:
+#     - /etc/prometheus/rules/cogno_rules.yml
+#
+# Recording rules pre-aggregate the hot ratios (cheaper dashboards + stable alert expressions);
+# alerts are phrased against them. Tune thresholds/`for` to your traffic + SLOs (see ops/SLOs.md).
+groups:
+  - name: cogno_recording
+    interval: 30s
+    rules:
+      # Turn throughput (per-second, 5m window)
+      - record: cogno:turns:rate5m
+        expr: sum(rate(cogno_turns_total[5m]))
+
+      # Error ratio — unhandled exceptions / all turns
+      - record: cogno:error_ratio:rate5m
+        expr: |
+          sum(rate(cogno_turn_errors_total[5m]))
+          / clamp_min(sum(rate(cogno_turns_total[5m])), 1)
+
+      # Block ratio — safety/quota/PII blocks / all turns
+      - record: cogno:block_ratio:rate5m
+        expr: |
+          sum(rate(cogno_blocked_total[5m]))
+          / clamp_min(sum(rate(cogno_turns_total[5m])), 1)
+
+      # Handoff ratio — human escalations / all turns
+      - record: cogno:handoff_ratio:rate5m
+        expr: |
+          sum(rate(cogno_handoffs_total[5m]))
+          / clamp_min(sum(rate(cogno_turns_total[5m])), 1)
+
+      # Tool failure ratio — failed tool calls / all tool calls
+      - record: cogno:tool_failure_ratio:rate5m
+        expr: |
+          sum(rate(cogno_tool_failures_total[5m]))
+          / clamp_min(sum(rate(cogno_tool_calls_total[5m])), 1)
+
+      # p95 end-to-end turn latency (seconds), all routes
+      - record: cogno:turn_latency_p95:5m
+        expr: |
+          histogram_quantile(0.95, sum(rate(cogno_turn_duration_seconds_bucket[5m])) by (le))
+
+      # Provider spend burn (USD/hour)
+      - record: cogno:cost_usd:rate1h
+        expr: sum(rate(cogno_cost_usd_total[1h])) * 3600
+
+  - name: cogno_alerts
+    rules:
+      - alert: CognoHighErrorRate
+        expr: cogno:error_ratio:rate5m > 0.05
+        for: 10m
+        labels: { severity: page }
+        annotations:
+          summary: "Cogno turn error rate > 5% (10m)"
+          description: "{{ $value | humanizePercentage }} of turns are raising unhandled exceptions. Check cogno_turn_errors_total by error, and host/lib ERROR logs (Loki)."
+
+      - alert: CognoLatencyP95High
+        expr: cogno:turn_latency_p95:5m > 30
+        for: 15m
+        labels: { severity: ticket }
+        annotations:
+          summary: "Cogno p95 turn latency > 30s (15m)"
+          description: "p95 is {{ $value }}s. Break down by cogno_stage_duration_seconds to find the slow stage (EGO loop / model provider)."
+
+      - alert: CognoToolFailureSpike
+        expr: cogno:tool_failure_ratio:rate5m > 0.20
+        for: 10m
+        labels: { severity: ticket }
+        annotations:
+          summary: "Cogno tool-call failure ratio > 20% (10m)"
+          description: "{{ $value | humanizePercentage }} of EGO tool calls fail — likely a broken MCP module / dispatcher, not a model issue."
+
+      - alert: CognoHandoffSpike
+        expr: cogno:handoff_ratio:rate5m > 0.10
+        for: 15m
+        labels: { severity: ticket }
+        annotations:
+          summary: "Cogno human-handoff ratio > 10% (15m)"
+          description: "The pipeline is giving up on {{ $value | humanizePercentage }} of turns (judge-reject / grounding-rewrite exhaustion). Quality regression or a bad persona/model."
+
+      - alert: CognoBlockRateHigh
+        expr: cogno:block_ratio:rate5m > 0.15
+        for: 15m
+        labels: { severity: ticket }
+        annotations:
+          summary: "Cogno block ratio > 15% (15m)"
+          description: "Many turns blocked (quota / safety / PII). Break down by cogno_blocked_total{stop_reason} — could be an abusive tenant or a mis-tuned scope guard."
+
+      - alert: CognoNoTraffic
+        expr: absent(cogno:turns:rate5m) or cogno:turns:rate5m == 0
+        for: 10m
+        labels: { severity: page }
+        annotations:
+          summary: "Cogno is serving no turns (10m)"
+          description: "No turns recorded — the app is down, wedged, or the metrics sink is disconnected. Check /health and that metrics_sink is wired."
+
+      - alert: CognoCostBurnHigh
+        expr: cogno:cost_usd:rate1h > 50
+        for: 30m
+        labels: { severity: ticket }
+        annotations:
+          summary: "Cogno provider spend > $50/h (30m)"
+          description: "Projected provider cost is {{ $value | printf \"%.2f\" }} USD/h. Check for a runaway loop / a tenant hammering a premium model."
