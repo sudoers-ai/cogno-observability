@@ -1,0 +1,61 @@
+{
+  "title": "Cogno — Live Logs",
+  "uid": "cogno-logs",
+  "tags": ["cogno", "sre", "logs"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "5s",
+  "time": { "from": "now-15m", "to": "now" },
+  "templating": {
+    "list": [
+      { "name": "loki", "type": "datasource", "query": "loki", "current": {}, "label": "Loki" },
+      { "name": "prometheus", "type": "datasource", "query": "prometheus", "current": {}, "label": "Prometheus" },
+      {
+        "name": "level", "type": "custom", "label": "Level", "includeAll": true, "multi": true,
+        "query": "DEBUG,INFO,WARNING,ERROR", "current": { "text": "All", "value": "$__all" }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Turn error ratio (5m)",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "${prometheus}" },
+      "gridPos": { "h": 5, "w": 6, "x": 0, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "percentunit", "thresholds": { "mode": "absolute", "steps": [
+        { "color": "green", "value": null }, { "color": "orange", "value": 0.02 }, { "color": "red", "value": 0.05 } ] } }, "overrides": [] },
+      "targets": [ { "expr": "cogno:error_ratio:rate5m", "refId": "A" } ]
+    },
+    {
+      "id": 2,
+      "title": "Log volume by level",
+      "type": "timeseries",
+      "datasource": { "type": "loki", "uid": "${loki}" },
+      "gridPos": { "h": 5, "w": 18, "x": 6, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "targets": [
+        { "expr": "sum by (level) (count_over_time({job=\"cogno-host\"} [1m]))", "legendFormat": "{{level}}", "refId": "A" }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Live logs — cogno-host",
+      "type": "logs",
+      "datasource": { "type": "loki", "uid": "${loki}" },
+      "gridPos": { "h": 20, "w": 24, "x": 0, "y": 5 },
+      "options": {
+        "showTime": true, "showLabels": false, "wrapLogMessage": true,
+        "prettifyLogMessage": true, "enableLogDetails": true, "dedupStrategy": "none",
+        "sortOrder": "Descending"
+      },
+      "targets": [
+        {
+          "expr": "{job=\"cogno-host\", level=~\"${level:regex}\"} | json",
+          "refId": "A"
+        }
+      ]
+    }
+  ]
+}

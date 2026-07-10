@@ -1,0 +1,35 @@
+# Ships the cogno-host JSON logs to Loki. The host must log JSON (COGNO_LOG_FORMAT=json) into a
+# file under ./logs (mounted at /var/log/cogno) — see README for the two ways to get logs there.
+server:
+  http_listen_port: 9080
+  log_level: warn
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  - job_name: cogno-host
+    static_configs:
+      - targets: [localhost]
+        labels:
+          job: cogno-host
+          __path__: /var/log/cogno/*.log
+    pipeline_stages:
+      # The host's _JsonFormatter emits {timestamp, level, logger, message, tenant, identity, channel}.
+      - json:
+          expressions:
+            level: level
+            logger: logger
+            ts: timestamp
+      # Only LOW-cardinality fields become stream labels (level, logger). tenant/identity/channel/
+      # session stay inside the JSON line — filter them in LogQL with `| json | tenant="acme"`,
+      # never as labels (Loki cardinality rule, same discipline as Prometheus).
+      - labels:
+          level:
+          logger:
+      - timestamp:
+          source: ts
+          format: RFC3339

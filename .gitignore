@@ -4,3 +4,5 @@ __pycache__/
 .mypy_cache/
 build/
 dist/
+deploy/logs/*.log
+deploy/.env

@@ -1,0 +1,64 @@
+# Monitoring stack for the Cogno host: Grafana (one login) over Prometheus (metrics) + Loki (logs).
+#
+#   cd deploy && docker compose up -d
+#   open http://localhost:3000   (login: admin / $GF_ADMIN_PASSWORD — set it in .env)
+#
+# It watches an EXISTING cogno-host (this compose does NOT run the host). Point it at yours:
+#   - metrics: Prometheus scrapes ${HOST_TARGET} (default host.docker.internal:8000) → /metrics
+#   - logs:    the host writes JSON logs (COGNO_LOG_FORMAT=json) to ./logs/*.log; Promtail tails them
+# The host must have observability on: COGNO_ENABLE_METRICS=1 + COGNO_LOG_FORMAT=json (see README).
+name: cogno-observability
+
+services:
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    restart: unless-stopped
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ../ops/alerts/cogno_rules.yml:/etc/prometheus/rules/cogno_rules.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=15d
+    extra_hosts: ["host.docker.internal:host-gateway"]   # reach a host-process cogno-host on Linux
+    ports: ["9090:9090"]
+
+  loki:
+    image: grafana/loki:3.1.1
+    restart: unless-stopped
+    command: -config.file=/etc/loki/loki-config.yml
+    volumes:
+      - ./loki-config.yml:/etc/loki/loki-config.yml:ro
+      - loki-data:/loki
+    ports: ["3100:3100"]
+
+  promtail:
+    image: grafana/promtail:3.1.1
+    restart: unless-stopped
+    command: -config.file=/etc/promtail/promtail-config.yml
+    volumes:
+      - ./promtail-config.yml:/etc/promtail/promtail-config.yml:ro
+      - ./logs:/var/log/cogno:ro                          # host JSON logs land here (see README)
+      - promtail-positions:/tmp
+    depends_on: [loki]
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GF_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GF_ADMIN_PASSWORD:-changeme}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_EXPLORE_ENABLED: "true"                          # live log tailing in Explore
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ../ops/dashboards:/var/lib/grafana/dashboards/cogno:ro
+      - grafana-data:/var/lib/grafana
+    ports: ["3000:3000"]
+    depends_on: [prometheus, loki]
+
+volumes:
+  prometheus-data:
+  loki-data:
+  grafana-data:
+  promtail-positions:

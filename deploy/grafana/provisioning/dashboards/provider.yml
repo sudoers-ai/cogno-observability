@@ -1,0 +1,14 @@
+apiVersion: 1
+
+providers:
+  - name: cogno
+    orgId: 1
+    folder: Cogno
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      # The dashboard JSONs from ../ops/dashboards, mounted into the Grafana container.
+      path: /var/lib/grafana/dashboards/cogno
+      foldersFromFilesStructure: false
