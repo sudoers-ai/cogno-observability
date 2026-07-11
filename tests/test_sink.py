@@ -40,6 +40,9 @@ class Event:
     failover_count: int = 0
     correction_count: int = 0
     handoff: bool = False
+    grounding_rule: str = ""
+    grounding_repaired: bool = False
+    provenance_refusals: int = 0
     stages: list = field(default_factory=list)
 
 
@@ -129,3 +132,15 @@ def test_two_default_registry_sinks_do_not_crash():
     # The real-world footgun: PrometheusMetricsSink() twice on the global REGISTRY.
     PrometheusMetricsSink()
     PrometheusMetricsSink()                            # must NOT raise
+
+
+def test_protection_net_counters(reg):
+    # grounding rewrite (rule + repaired) and provenance refusals land as counters; a clean
+    # turn (empty rule, zero refusals) emits neither series.
+    sink = PrometheusMetricsSink(registry=reg)
+    sink.record(Event(grounding_rule="performative_without_commit", grounding_repaired=True,
+                      provenance_refusals=2))
+    sink.record(Event())                                     # clean turn → no net samples
+    assert reg.get_sample_value("cogno_grounding_rewrites_total", {
+        "rule": "performative_without_commit", "repaired": "true"}) == 1.0
+    assert reg.get_sample_value("cogno_provenance_refusals_total") == 2.0
