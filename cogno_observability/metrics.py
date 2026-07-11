@@ -100,5 +100,15 @@ class Metrics:
             "cogno_self_corrections_total", "EGO↔SUPEREGO correction retries")
         self.handoffs_total = counter(
             "cogno_handoffs_total", "Turns escalated to a human handoff")
+
+        # ── protection nets (the anti-fabrication layers; see cogno-host grounding.py /
+        #    provenance.py) — a rising rate = a model/vertical regressing upstream ──────────
+        self.grounding_rewrites_total = counter(
+            "cogno_grounding_rewrites_total",
+            "Replies rewritten by the grounding backstop, by rule; repaired=true means the "
+            "repair re-step delivered the real answer", ["rule", "repaired"])
+        self.provenance_refusals_total = counter(
+            "cogno_provenance_refusals_total",
+            "Stale-id writes refused by the id-provenance guard (absorbed in the EGO loop)")
         self.blocked_total = counter(
             "cogno_blocked_total", "Turns blocked (safety/quota/PII)", ["stop_reason"])

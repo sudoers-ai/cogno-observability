@@ -147,3 +147,12 @@ class PrometheusMetricsSink:
             m.self_corrections_total.inc(corrections)
         if getattr(e, "handoff", False):
             m.handoffs_total.inc()
+        # protection nets (see cogno-host grounding.py / provenance.py)
+        grounding_rule = getattr(e, "grounding_rule", "") or ""
+        if grounding_rule:
+            m.grounding_rewrites_total.labels(
+                rule=grounding_rule,
+                repaired=_b(getattr(e, "grounding_repaired", False))).inc()
+        provenance_refusals = int(getattr(e, "provenance_refusals", 0) or 0)
+        if provenance_refusals:
+            m.provenance_refusals_total.inc(provenance_refusals)
