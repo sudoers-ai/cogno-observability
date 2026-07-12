@@ -9,7 +9,8 @@ description = "SRE/Ops monitoring for the Cogno stack — Prometheus metrics sin
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "Apache-2.0" }
-authors = [{ name = "Cogno" }]
+authors = [{ name = "Vinicius Vale" }]
+maintainers = [{ name = "Sudoers AI" }]
 dependencies = [
     "prometheus-client>=0.20",
 ]
