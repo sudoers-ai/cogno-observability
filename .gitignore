@@ -6,3 +6,15 @@ build/
 dist/
 deploy/logs/*.log
 deploy/.env
+
+# Local secrets. The rule matches the FAMILY, not one filename.
+#
+# `.env*` rather than `.env` + `.env.*`: the narrower pair misses `.env-backup` and `.envbak`,
+# and those are the names a person actually types when setting a config aside. A pattern that
+# covers only the name you thought of leaves the next copy exposed — and a secret committed
+# once stays in history after any `git rm`.
+#
+# The negation keeps a versioned template committable — `deploy/.env.example` is one,
+# and it is re-included at any depth.
+.env*
+!.env.example
