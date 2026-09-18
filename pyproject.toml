@@ -33,6 +33,31 @@ dev = [
 [tool.setuptools.packages.find]
 include = ["cogno_observability*"]
 
+# PEP 561. Without this marker INSIDE the built wheel, a type checker that finds this package in
+# site-packages does not read a line of it: with `ignore_missing_imports = true` — which every
+# repo in this stack sets, to keep third-party noise out — the whole package silently becomes
+# `Any`, and every disagreement across the seam stops being an error.
+#
+# Measured on cogno-host 2026-09-18, and it is the reason this file exists: the host's
+# `_resolve_observability` returns `(PrometheusMetricsSink(), attach)` where a
+# `tuple[MetricsSink | None, ...]` is declared, and the sink had stopped satisfying `MetricsSink`
+# on 2026-09-01. `mypy cogno_host` over a wheel of this package WITHOUT the marker reported the
+# error 0 times; with the marker, 1; with it removed again, 0. The host's CI ran that step green
+# on 2026-09-02 (run 33600599128, step "Type-check (mypy)", both 3.10 and 3.12) with the defect
+# already in the tree.
+#
+# `package-data` is declared EXPLICITLY rather than left to `include-package-data`. MEASURED, so
+# the reason is stated as it is and not as it would be convenient: on setuptools 82.0.1 the marker
+# ships WITHOUT this block too (removing it and rebuilding still produced a wheel carrying
+# `py.typed`), because modern setuptools discovers non-`.py` files inside a package directory on
+# its own. It stays because a guarantee that rests on a default is a guarantee that moves when the
+# default does, and this one is invisible when it breaks: the repo still looks typed, only the
+# INSTALL is not. The guard that actually holds it is `tests/test_py_typed_ships.py`, which asserts
+# against a BUILT WHEEL rather than against the checkout — and which, in its first version, passed
+# over the deletion of this very file because setuptools had staged a copy in `build/lib`.
+[tool.setuptools.package-data]
+cogno_observability = ["py.typed"]
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]

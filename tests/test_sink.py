@@ -37,7 +37,6 @@ class Event:
     drift_action: str = ""
     tool_calls: int = 0
     tool_failures: int = 0
-    failover_count: int = 0
     correction_count: int = 0
     handoff: bool = False
     grounding_rule: str = ""
@@ -86,14 +85,13 @@ def test_stage_tokens_by_model_and_direction(reg):
 def test_cost_drift_tools_reliability(reg):
     sink = PrometheusMetricsSink(registry=reg)
     sink.record(Event(cost_usd=0.0123, drift_cumulative=0.42, drift_action="warn",
-                      tool_calls=3, tool_failures=1, failover_count=2,
+                      tool_calls=3, tool_failures=1,
                       correction_count=1, handoff=True))
     assert reg.get_sample_value("cogno_cost_usd_total") == pytest.approx(0.0123)
     assert reg.get_sample_value("cogno_drift_actions_total", {"action": "warn"}) == 1.0
     assert reg.get_sample_value("cogno_drift_score_count") == 1.0
     assert reg.get_sample_value("cogno_tool_calls_total") == 3.0
     assert reg.get_sample_value("cogno_tool_failures_total") == 1.0
-    assert reg.get_sample_value("cogno_failovers_total") == 2.0
     assert reg.get_sample_value("cogno_self_corrections_total") == 1.0
     assert reg.get_sample_value("cogno_handoffs_total") == 1.0
 

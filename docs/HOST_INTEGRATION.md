@@ -43,9 +43,15 @@ export COGNO_LOG_FORMAT=json         # JSON logs (for Loki)
 `PrometheusMetricsSink.record` **duck-types** the event (reads attributes, no `cogno_host`
 import), so any host emitting this shape is observable. The fields it reads: `route`,
 `stop_reason`, `ok`, `error`, `blocked`, `cache_hit`, `elapsed_ms`, `cost_usd`,
-`drift_cumulative`, `drift_action`, `tool_calls`, `tool_failures`, `failover_count`,
-`correction_count`, `handoff`, and `stages` (a list of `{stage, model, tokens_in, tokens_out,
-embedding_tokens, elapsed_ms}`). See `tests/test_contract.py` for the enforced shape.
+`drift_cumulative`, `drift_action`, `tool_calls`, `tool_failures`, `correction_count`,
+`handoff`, `grounding_rule`, `grounding_repaired`, `provenance_refusals`, and `stages` (a
+list of `{stage, model, tokens_in, tokens_out, embedding_tokens, elapsed_ms}`).
+
+That list is not maintained by hand on either side: `TurnEventLike` in `sink.py` declares it,
+`tests/test_protocol_matches_the_reads.py` holds the declaration byte-for-byte against the
+`getattr` reads in `_record`, and `tests/test_contract.py` holds it against the host's real
+`TurnEvent`. `failover_count` used to be on this line; the host cut the field (cogno-host
+#605) because nothing ever wrote it, and this side followed.
 
 ## Cardinality rule
 

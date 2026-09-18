@@ -24,12 +24,31 @@ log = logging.getLogger("cogno_observability.sink")
 
 @runtime_checkable
 class TurnEventLike(Protocol):
-    """The subset of the host's ``TurnEvent`` this sink reads (documentation + typing only)."""
+    """EXACTLY the event attributes :meth:`PrometheusMetricsSink._record` reads — no more, no less.
+
+    It is not decoration: it sits in a **parameter** position (``record(event: TurnEventLike)``),
+    which makes it a REQUIREMENT on every host that wants to inject this sink. A member declared
+    here that the host does not carry makes ``PrometheusMetricsSink`` stop satisfying the host's
+    own ``MetricsSink`` protocol — the sink is refused by the type checker while working perfectly
+    at runtime, because ``_record`` reads through ``getattr(..., default)``.
+
+    That is not hypothetical. ``failover_count`` was declared here and the host CUT the field on
+    2026-09-01 (cogno-host #605, "a reader with no writer since birth"): nothing in the stack ever
+    stamped it, so the series could only ever be 0, and a flat zero READS as "no failover
+    happened" — a false statement, worse than absence. The reasoning applies verbatim on this side
+    of the seam, so the read and ``cogno_failovers_total`` left with it. Re-add both WITH a writer,
+    never before.
+
+    The list is kept honest by ``tests/test_protocol_matches_the_reads.py``, which derives the
+    reads from this module's AST: declaring a member nobody reads, or reading a field nobody
+    declared, fails. Before that test the drift ran BOTH ways at once — ``total_tokens`` was
+    declared and never read, while ``grounding_rule``/``grounding_repaired``/
+    ``provenance_refusals`` were read and never declared.
+    """
 
     tenant_id: str
     route: str
     stop_reason: str
-    total_tokens: int
     elapsed_ms: float
     cache_hit: bool
     blocked: bool
@@ -40,9 +59,11 @@ class TurnEventLike(Protocol):
     drift_action: str
     tool_calls: int
     tool_failures: int
-    failover_count: int
     correction_count: int
     handoff: bool
+    grounding_rule: str
+    grounding_repaired: bool
+    provenance_refusals: int
     stages: list
 
 
@@ -139,9 +160,6 @@ class PrometheusMetricsSink:
         tool_failures = int(getattr(e, "tool_failures", 0) or 0)
         if tool_failures:
             m.tool_failures_total.inc(tool_failures)
-        failovers = int(getattr(e, "failover_count", 0) or 0)
-        if failovers:
-            m.failovers_total.inc(failovers)
         corrections = int(getattr(e, "correction_count", 0) or 0)
         if corrections:
             m.self_corrections_total.inc(corrections)

@@ -94,8 +94,6 @@ class Metrics:
             "cogno_tool_calls_total", "EGO tool executions")
         self.tool_failures_total = counter(
             "cogno_tool_failures_total", "EGO tool executions that returned ok=False")
-        self.failovers_total = counter(
-            "cogno_failovers_total", "LLM backend failover events")
         self.self_corrections_total = counter(
             "cogno_self_corrections_total", "EGO↔SUPEREGO correction retries")
         self.handoffs_total = counter(
