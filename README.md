@@ -66,7 +66,7 @@ With neither argument the host runs exactly as before (no-op sink, no `/metrics`
 | `cogno_drift_score` | histogram | — | cumulative drift distribution |
 | `cogno_drift_actions_total` | counter | action | drift-triggered actions |
 | `cogno_tool_calls_total` / `_failures_total` | counter | — | EGO tool calls / failures |
-| `cogno_failovers_total`, `cogno_self_corrections_total`, `cogno_handoffs_total` | counter | — | reliability |
+| `cogno_self_corrections_total`, `cogno_handoffs_total` | counter | — | reliability |
 | `cogno_blocked_total` | counter | stop_reason | safety/quota/PII blocks |
 
 Plus HTTP RED metrics (`http_request_*`) from the instrumentator.

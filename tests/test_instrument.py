@@ -26,7 +26,7 @@ def test_metrics_endpoint_exposes_series():
     PrometheusMetricsSink().record(SimpleNamespace(
         route="EGO", stop_reason="completed", ok=True, blocked=False, cache_hit=False,
         elapsed_ms=500, stages=[], cost_usd=0.0, drift_cumulative=0.0, drift_action="",
-        tool_calls=0, tool_failures=0, failover_count=0, correction_count=0, handoff=False,
+        tool_calls=0, tool_failures=0, correction_count=0, handoff=False,
         error="", tenant_id="acme", total_tokens=0))
     client = TestClient(app)
     client.get("/ping")               # generate an HTTP-layer sample

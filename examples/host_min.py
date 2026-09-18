@@ -43,7 +43,6 @@ class TurnEvent:                         # a stand-in for the host's per-turn DT
     drift_action: str = ""
     tool_calls: int = 0
     tool_failures: int = 0
-    failover_count: int = 0
     correction_count: int = 0
     handoff: bool = False
     tenant_id: str = "acme"
