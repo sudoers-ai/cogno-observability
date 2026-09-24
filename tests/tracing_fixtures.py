@@ -46,6 +46,8 @@ class Tool:
     ok: bool = True
     elapsed_ms: Optional[float] = None
     started_at: Optional[float] = None
+    # to be set by the host wiring: the name is one of the persona's catalogued tools
+    in_catalog: bool = False
     # content the core's ToolExecution carries, which tracing.py must never read
     arguments: dict = field(default_factory=dict)
     result: str = ""
@@ -100,7 +102,8 @@ def ordinary_turn() -> Event:
                   tokens_out=120, elapsed_ms=230.0, cost_usd=0.000297,
                   served_model="gpt-4o-mini-2024-07-18"),
         ],
-        tools=[Tool("resolve_date", ok=True), Tool("consult_material", ok=True)],
+        tools=[Tool("resolve_date", ok=True, in_catalog=True),
+               Tool("consult_material", ok=True, in_catalog=True)],
     )
 
 

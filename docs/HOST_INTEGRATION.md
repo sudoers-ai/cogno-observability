@@ -111,6 +111,13 @@ cost, times and outcome codes. Three guards enforce that, and each one has a tes
    behind a prefix like `wa:`). Anything else becomes `_OTHER`. The tenant id is sent
    only when it is a UUID or a token, and is otherwise omitted.
 
+**A tool name is the one value the model produces.** The core records a tool the model
+invented under the invented name (`EgoStage`: `ToolExecution(tool=name, ok=False)`), and a name
+made from what the contact said, such as `lookup_<their name>`, is a perfectly good token. So
+`gen_ai.tool.name`, and the span name, carry the tool's name only when the host sets
+`in_catalog=True` on the record, confirming it is one of the persona's tools. Otherwise both say
+`_OTHER`.
+
 `tests/test_tracing_pii_guard.py` plants invented personal data in every one of those fields
 and reads back everything a span can carry.
 
@@ -148,8 +155,8 @@ drives the sink: turn span, model spans and ledger tokens, with the children `an
 wiring adds the fields listed in `_AWAITING_HOST_WIRING` (`tests/test_contract.py`):
 
 - `TurnEvent.started_at` and `TurnEvent.tools`, a list of records with the core's
-  `ToolExecution` names `tool`/`ok`, plus `elapsed_ms`/`started_at` when the host times the
-  call;
+  `ToolExecution` names `tool`/`ok`, plus `in_catalog` (see below) and `elapsed_ms`/`started_at`
+  when the host times the call;
 - `StageSample.provider`, `served_model`, `cost_usd`, `embedding_cost_usd`, `attempt` and
   `started_at`.
 
@@ -172,7 +179,7 @@ the job of the host's failed-turn record (M1), not of this sink.
 | `gen_ai.usage.input_tokens` | chat, embeddings | int | semconv | input tokens of the ledger row (embedding tokens on an embeddings span) |
 | `gen_ai.usage.output_tokens` | chat | int | semconv | output tokens of the ledger row |
 | `gen_ai.usage.cache_read.input_tokens` | chat | int | semconv | the SUBSET of input tokens the provider served from its cache; omitted when 0 |
-| `gen_ai.tool.name` | tool | str | semconv | the tool's name |
+| `gen_ai.tool.name` | tool | str | semconv | the tool's name, only when the host confirmed it is catalogued, else _OTHER |
 | `gen_ai.tool.type` | tool | str | semconv | always 'function': the host executes every tool the EGO calls |
 | `cogno.stage` | chat, embeddings | str | cogno | the cognitive stage of the row (noumeno, ner, ego, superego_voice, ...) |
 | `cogno.attempt` | chat, embeddings | int | cogno | the correction-loop attempt the row belongs to; omitted when not stamped |

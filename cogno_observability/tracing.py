@@ -12,13 +12,16 @@ models, tokens, cost, times and outcome codes, and nothing else. Nothing about t
 out, because this module never READS the fields that could carry it: the message, the prompt,
 the reply, tool arguments, tool results, error MESSAGES, ``identity_id`` and ``session_id``. That
 is a property of the reads, and ``tests/test_tracing_reads.py`` derives them from this module's
-AST. Two guards sit on top of it. (1) :data:`SPAN_ATTRIBUTES` is both the allowlist and the
+AST. A tool NAME is the one value the model produces, so it is sent only when the host confirms
+the tool is catalogued (``in_catalog``), and is ``_OTHER`` otherwise.
+
+Two guards sit on top of the reads. (1) :data:`SPAN_ATTRIBUTES` is both the allowlist and the
 emitter, because the emitter is a loop over that table. An attribute with no row cannot be set,
 and the span names are built from values that went through (2). (2) Every string value must be a
 TOKEN (:func:`_token`): it starts with a letter, has no spaces and no ``@``, and has no run of
-ten or more digits. A sentence, an e-mail address or a phone number becomes ``_OTHER``. None of the spec's Opt-In content
-attributes (``gen_ai.input.messages``, ``gen_ai.tool.call.arguments`` and the rest) has a row.
-``tests/test_tracing_pii_guard.py`` checks that by name.
+ten or more digits. A sentence, an e-mail address or a phone number becomes ``_OTHER``. None of
+the spec's Opt-In content attributes (``gen_ai.input.messages``, ``gen_ai.tool.call.arguments``
+and the rest) has a row. ``tests/test_tracing_pii_guard.py`` checks that by name.
 
 **When it runs.** AFTER the turn, from the event the host already hands its metrics sink.
 Emitting then, rather than as live spans, means the spans are built from the same per-stage
@@ -182,8 +185,9 @@ INPUT_FIELDS: Mapping[str, tuple[str, ...]] = {
     "stage": ("stage", "model", "tokens_in", "tokens_out", "embedding_tokens", "cached_tokens",
               "elapsed_ms", "provider", "served_model", "cost_usd", "embedding_cost_usd",
               "attempt", "started_at"),
-    # one item of ``TurnEvent.tools``: ``tool``/``ok`` are the core's ``ToolExecution`` names
-    "tool": ("tool", "ok", "elapsed_ms", "started_at"),
+    # one item of ``TurnEvent.tools``: ``tool``/``ok`` are the core's ``ToolExecution`` names;
+    # ``in_catalog`` is the host's confirmation that ``tool`` is one of the persona's tools
+    "tool": ("tool", "ok", "in_catalog", "elapsed_ms", "started_at"),
 }
 
 
@@ -265,7 +269,8 @@ SPAN_ATTRIBUTES: "tuple[SpanAttribute, ...]" = (
     _row("gen_ai.usage.cache_read.input_tokens", (CHAT,), int, "semconv",
          lambda r: r.cached_tokens or None,
          "the SUBSET of input tokens the provider served from its cache; omitted when 0"),
-    _row("gen_ai.tool.name", (TOOL,), str, "semconv", lambda r: r.tool, "the tool's name"),
+    _row("gen_ai.tool.name", (TOOL,), str, "semconv", lambda r: r.tool,
+         "the tool's name, only when the host confirmed it is catalogued, else _OTHER"),
     _row("gen_ai.tool.type", (TOOL,), str, "semconv", lambda r: "function",
          "always 'function': the host executes every tool the EGO calls"),
     _row("cogno.stage", _MODEL, str, "cogno", lambda r: r.stage,
@@ -487,7 +492,15 @@ def plan_spans(event: Any, *, embedding_model: str = "", now_ns: Optional[int] =
         tool_ok = bool(getattr(call, "ok", True))
         start, stop, timing = _interval(t_start, getattr(call, "started_at", None),
                                         getattr(call, "elapsed_ms", None))
-        row = _Row(kind=TOOL, timing=timing, tool=getattr(call, "tool", "") or None,
+        # A tool name is what the MODEL produced, and the core records an unknown one as it came
+        # (``EgoStage``: ``ToolExecution(tool=name, ok=False, error="unknown tool ...")``). A name
+        # invented from what the contact said can be a perfectly good token
+        # (``lookup_<their name>``), so the value guard cannot stop it. The name is therefore sent
+        # only when the HOST confirms it is one of the persona's catalogued tools. It is a strict
+        # ``True``, not a truthy value, and anything else is ``_OTHER``.
+        catalogued = getattr(call, "in_catalog", False) is True
+        name = (getattr(call, "tool", "") or None) if catalogued else OTHER
+        row = _Row(kind=TOOL, timing=timing, tool=name,
                    error_type=None if tool_ok else OTHER)
         plan.append(PlannedSpan(TOOL, _span_name(TOOL, row.tool), start, stop,
                                 _attributes(row), error=not tool_ok))

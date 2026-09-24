@@ -21,8 +21,8 @@ from cogno_observability.tracing import INPUT_FIELDS
 
 _MODULE = pathlib.Path(__file__).resolve().parent.parent / "cogno_observability" / "tracing.py"
 
-#: The loop variable (or parameter) that holds each source object in ``plan_spans``.
-_SOURCE_OF = {"event": "turn", "sample": "stage", "call": "tool"}
+#: The source each of the host's lists feeds, keyed by the ``TurnEvent`` field it comes from.
+_LIST_SOURCE = {"stages": "stage", "tools": "tool"}
 
 #: Fields a host object really carries and this module must never read. They are listed by name
 #: because they are the reason this test exists.
@@ -35,6 +35,28 @@ def _tree() -> ast.Module:
     return ast.parse(_MODULE.read_text(encoding="utf-8"))
 
 
+def _source_names() -> "dict[str, str]":
+    """``{variable name: source}`` DERIVED from ``plan_spans``, not assumed. The event is its first
+    parameter, and a stage or tool is whatever a ``for`` binds while iterating over
+    ``getattr(event, "stages"/"tools", ...)``. So renaming a variable does not quietly empty the
+    checks below."""
+    fn = next(n for n in ast.walk(_tree())
+              if isinstance(n, ast.FunctionDef) and n.name == "plan_spans")
+    event = fn.args.args[0].arg
+    names = {event: "turn"}
+    for loop in (n for n in ast.walk(fn) if isinstance(n, ast.For)):
+        for call in (n for n in ast.walk(loop.iter) if isinstance(n, ast.Call)
+                     and isinstance(n.func, ast.Name) and n.func.id == "getattr"):
+            target, attr = call.args[0], call.args[1]
+            if isinstance(target, ast.Name) and target.id == event \
+                    and isinstance(attr, ast.Constant) and attr.value in _LIST_SOURCE:
+                assert isinstance(loop.target, ast.Name), ast.unparse(loop)
+                names[loop.target.id] = _LIST_SOURCE[attr.value]
+    assert set(names.values()) == {"turn", "stage", "tool"}, \
+        f"the derivation found {names}: it broke, not the contract"
+    return names
+
+
 def _getattr_calls():
     for node in ast.walk(_tree()):
         if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) \
@@ -43,19 +65,28 @@ def _getattr_calls():
 
 
 def _reads() -> "dict[str, set[str]]":
+    source_of = _source_names()
     out: "dict[str, set[str]]" = {}
     for node in _getattr_calls():
         target, attr = node.args[0], node.args[1]
         assert isinstance(target, ast.Name), ast.unparse(node)
-        assert target.id in _SOURCE_OF, (
+        assert target.id in source_of, (
             f"a getattr on {target.id!r}, which is not one of the host's objects this module "
             f"may read: {ast.unparse(node)}")
         assert isinstance(attr, ast.Constant) and isinstance(attr.value, str), \
             "a computed attribute name would make the reads underivable"
         assert len(node.args) == 3, f"a read with no default raises on a lagging host: " \
                                     f"{ast.unparse(node)}"
-        out.setdefault(_SOURCE_OF[target.id], set()).add(attr.value)
+        out.setdefault(source_of[target.id], set()).add(attr.value)
     return out
+
+
+def _plain_reads() -> "set[tuple[str, str]]":
+    """``(source, field)`` for every PLAIN read (``call.error``) off one of the host's objects."""
+    source_of = _source_names()
+    return {(source_of[n.value.id], n.attr) for n in ast.walk(_tree())
+            if isinstance(n, ast.Attribute) and isinstance(n.value, ast.Name)
+            and n.value.id in source_of}
 
 
 def test_the_reads_are_exactly_the_declared_input_fields():
@@ -79,11 +110,23 @@ def test_no_content_or_contact_field_is_read_by_any_route():
         sorted((attrs | getattrs | declared) & _NEVER_READ)
 
 
+def test_every_read_goes_through_getattr_so_the_equality_above_sees_it():
+    """A plain ``call.error`` would be a read that ``getattr`` derivation cannot see, and it
+    would also raise on a host that does not carry the field. So there are none."""
+    assert _plain_reads() == set(), sorted(_plain_reads())
+
+
 def test_the_error_read_is_the_turns_class_name_never_a_tools_message():
     """``error`` is read off the TURN only. There it is the host's ``type(exc).__name__``, and it
-    still goes through the value guard. A tool's ``error`` is free text, so it is not read."""
-    assert "error" in INPUT_FIELDS["turn"]
-    assert "error" not in INPUT_FIELDS["tool"] and "error" not in INPUT_FIELDS["stage"]
+    still goes through the value guard. A tool's ``error`` is free text, so it is not read.
+    Measured on the AST, both routes, and not on the declared table, which cannot contradict
+    itself."""
+    reads = _reads()
+    plain = _plain_reads()
+    assert "error" in reads["turn"], "the turn's error read is gone: this test measured nothing"
+    for source in ("stage", "tool"):
+        assert "error" not in reads.get(source, set())
+        assert (source, "error") not in plain
 
 
 def test_the_library_reads_no_environment():

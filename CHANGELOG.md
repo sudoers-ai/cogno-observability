@@ -10,7 +10,8 @@
   (`open-telemetry/semantic-conventions-genai@8ffdf568e1`, 2026-09-22, status Development; see
   `SEMCONV_REF`). It sends metadata only: the fields that could carry content or identify the
   contact are never read (`tests/test_tracing_reads.py`, from the AST). `SPAN_ATTRIBUTES` is the
-  allowlist and the emitter, and every string value is a token or `_OTHER`. Times are never
+  allowlist and the emitter, and every string value is a token or `_OTHER`. A tool's name, the one
+  value the model produces, is sent only when the host marks the call `in_catalog=True`. Times are never
   invented (`cogno.timing`). Also `plan_spans`, a pure description of the same spans with no
   OpenTelemetry import.
 - Extra **`[otel]`** (`opentelemetry-api`, `opentelemetry-sdk`). Nothing imports `opentelemetry`

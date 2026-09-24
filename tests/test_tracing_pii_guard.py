@@ -28,9 +28,12 @@ from tracing_fixtures import NOW_NS, Event, Stage, Tool, in_memory_provider
 #: The phone number the contact's ``identity_id`` IS on WhatsApp (invented).
 PHONE = "5511987654321"
 EMAIL = "ana.teste@example.com"
+#: Tool names a model could invent from what the contact said. Every one is a TOKEN (no space,
+#: no "@", no run of ten digits), so the value guard alone does not stop them.
+INVENTED_TOOL_NAMES = ("lookup_ana_teste", "ana.teste", "tel:11-98765-4321")
 #: Every planted value, and the fragments of them that must not leak either.
 PLANTED = (PHONE, "98765-4321", "+55 11", EMAIL, "example.com", "Ana Teste", "Rua das Flores",
-           "R$ 1.250,00", "123.456.789-09")
+           "R$ 1.250,00", "123.456.789-09", "ana_teste", "ana.teste")
 
 #: Content and identity attributes of the GenAI conventions (SEMCONV_REF), written out BY NAME
 #: from the spec: the Opt-In content attributes, the ones the spec flags as sensitive, and the
@@ -63,13 +66,18 @@ def _laden_turn() -> Event:
             Stage("ner", model=f"wa:{PHONE}", provider=f"wa:{PHONE}", tokens_in=1),
         ],
         tools=[
-            Tool("notify_user", ok=True,
+            Tool("notify_user", ok=True, in_catalog=True,
                  arguments={"to": EMAIL, "phone": PHONE,
                             "text": "Olá Ana Teste, o pagamento de R$ 1.250,00 foi confirmado"},
                  result=f"sent to {EMAIL}; CPF 123.456.789-09; Rua das Flores, 10"),
             Tool(f"send to {EMAIL}", ok=False, error=f"{PHONE} rejected"),
             Tool(PHONE, ok=False, error="Rua das Flores"),
             Tool(f"wa:{PHONE}", ok=True),
+            # names the MODEL invented, which the core records as they came
+            # (``EgoStage``: an unknown tool is still a ``ToolExecution(tool=name, ok=False)``).
+            # Each one IS a token, so the value guard lets it through; only the catalog
+            # confirmation stops it.
+            *[Tool(name, ok=False) for name in INVENTED_TOOL_NAMES],
         ],
     )
 
@@ -83,8 +91,8 @@ def spans():
     # Prove the condition happened before reading the verdict: a turn with every kind of span,
     # the bad names included. An empty export would pass everything below.
     ops = sorted(s.attributes["gen_ai.operation.name"] for s in out)
-    assert ops == ["chat", "chat", "chat", "embeddings", "execute_tool", "execute_tool",
-                   "execute_tool", "execute_tool", "invoke_agent"], ops
+    assert ops == ["chat", "chat", "chat", "embeddings"] + ["execute_tool"] * 7 \
+        + ["invoke_agent"], ops
     return out
 
 
@@ -133,6 +141,16 @@ def test_the_bad_names_became_the_fallback_not_a_guess(spans):
     assert "execute_tool notify_user" in names and "chat gpt-4o-mini" in names
 
 
+def test_a_tool_name_is_sent_only_when_the_host_confirmed_it_is_catalogued(spans):
+    """The model can invent a tool name, and the core records it as it came. A name that is a
+    token (``lookup_ana_teste``) passes the value guard. So a tool's name is sent only when the
+    host says it is one of the persona's catalogued tools, and is ``_OTHER`` otherwise, whatever
+    the call's outcome."""
+    tools = [s for s in spans if s.attributes["gen_ai.operation.name"] == "execute_tool"]
+    named = sorted(s.attributes["gen_ai.tool.name"] for s in tools)
+    assert named == ["_OTHER"] * 6 + ["notify_user"]
+
+
 def test_the_control_an_ordinary_turn_is_not_emptied_by_the_guard():
     """Control: the guard removes values that are not tokens, and keeps everything that is."""
     provider, exporter = in_memory_provider()
@@ -140,7 +158,7 @@ def test_the_control_an_ordinary_turn_is_not_emptied_by_the_guard():
         tenant_id="acme", route="EGO", stop_reason="completed",
         stages=[Stage("ner", model="gpt-4o-mini", provider="openai", tokens_in=10,
                       tokens_out=2)],
-        tools=[Tool("resolve_date")]))
+        tools=[Tool("resolve_date", in_catalog=True)]))
     values = [str(v) for s in exporter.get_finished_spans() for v in s.attributes.values()]
     assert "_OTHER" not in values
     assert {"acme", "EGO", "completed", "ner", "gpt-4o-mini", "openai", "resolve_date"} \

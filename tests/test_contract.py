@@ -84,7 +84,7 @@ def test_the_tool_fields_are_the_cores_own_names():
     from cogno_observability.tracing import INPUT_FIELDS
 
     fields = set(types.ToolExecution.model_fields)
-    assert set(INPUT_FIELDS["tool"]) - {"elapsed_ms", "started_at"} <= fields
+    assert set(INPUT_FIELDS["tool"]) - {"in_catalog", "elapsed_ms", "started_at"} <= fields
 
 
 def test_a_real_turnevent_drives_the_trace_sink_end_to_end():
