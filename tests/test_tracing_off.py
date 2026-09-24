@@ -11,6 +11,7 @@ other tests and its ``sys.modules`` would answer nothing.
 from __future__ import annotations
 
 import json
+import os
 import pathlib
 import subprocess
 import sys
@@ -56,7 +57,9 @@ print(json.dumps({"planned": len(plan), "before": before_build, "after": after_b
 def _probe(mode: str) -> dict:
     out = subprocess.run([sys.executable, "-c", _PROBE, mode], cwd=_ROOT,
                          capture_output=True, text=True, timeout=120,
-                         env={"PYTHONPATH": str(_ROOT), "PATH": "/usr/bin:/bin"})
+                         # the inherited environment, so that a CI interpreter keeps whatever
+                         # it needs to start (setup-python exports LD_LIBRARY_PATH on Linux)
+                         env={**os.environ, "PYTHONPATH": str(_ROOT)})
     assert out.returncode == 0, out.stderr[-3000:]
     return json.loads(out.stdout.strip().splitlines()[-1])
 
