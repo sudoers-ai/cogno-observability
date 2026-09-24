@@ -15,8 +15,8 @@ is a property of the reads, and ``tests/test_tracing_reads.py`` derives them fro
 AST. Two guards sit on top of it. (1) :data:`SPAN_ATTRIBUTES` is both the allowlist and the
 emitter, because the emitter is a loop over that table. An attribute with no row cannot be set,
 and the span names are built from values that went through (2). (2) Every string value must be a
-TOKEN (:func:`_token`): it starts with a letter and has no spaces and no ``@``. A sentence, an
-e-mail address or a bare phone number becomes ``_OTHER``. None of the spec's Opt-In content
+TOKEN (:func:`_token`): it starts with a letter, has no spaces and no ``@``, and has no run of
+ten or more digits. A sentence, an e-mail address or a phone number becomes ``_OTHER``. None of the spec's Opt-In content
 attributes (``gen_ai.input.messages``, ``gen_ai.tool.call.arguments`` and the rest) has a row.
 ``tests/test_tracing_pii_guard.py`` checks that by name.
 
@@ -121,6 +121,11 @@ UNKNOWN_PROVIDER = "unknown"
 # characters are the ones model and tool names really use (``us.anthropic.claude-3-haiku-v1:0``,
 # ``accounts/fireworks/models/x``).
 _TOKEN_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_.:/-]{0,127}")
+# ...and no run of TEN or more digits, which is the shape of a phone number (11 digits for a
+# Brazilian mobile, 13 with the country code) or of an unformatted national id, even behind a
+# letter prefix such as ``wa:5511...``. A model snapshot date is 8 digits
+# (``claude-3-haiku-20240307``), so real names pass.
+_LONG_DIGITS_RE = re.compile(r"[0-9]{10,}")
 
 
 def _token(value: Any) -> Optional[str]:
@@ -134,7 +139,9 @@ def _token(value: Any) -> Optional[str]:
     text = str(value).strip()
     if not text:
         return None
-    return text if _TOKEN_RE.fullmatch(text) else OTHER
+    if not _TOKEN_RE.fullmatch(text) or _LONG_DIGITS_RE.search(text):
+        return OTHER
+    return text
 
 
 def _tenant(value: Any) -> Optional[str]:
@@ -239,9 +246,10 @@ _MODEL = (CHAT, EMBEDDINGS)
 #: total, and ``cogno.turn.cost_usd`` is never counted twice into it.
 SPAN_ATTRIBUTES: "tuple[SpanAttribute, ...]" = (
     _row("gen_ai.operation.name", SPAN_KINDS, str, "semconv", lambda r: _OPERATION[r.kind],
-         "invoke_agent | chat | embeddings | execute_tool"),
-    _row("error.type", SPAN_KINDS, str, "semconv", lambda r: r.error_type,
-         "set only on failure: the exception CLASS of a failed turn, else _OTHER"),
+         "invoke_agent, chat, embeddings or execute_tool"),
+    _row("error.type", (TURN, TOOL), str, "semconv", lambda r: r.error_type,
+         "only on a failure: a failed turn's exception class, else _OTHER; a failed tool is "
+         "always _OTHER"),
     _row("gen_ai.provider.name", _MODEL, str, "semconv", lambda r: r.provider,
          "who served the call; 'unknown' when the host did not say"),
     _row("gen_ai.request.model", _MODEL, str, "semconv", lambda r: r.model,
@@ -265,7 +273,7 @@ SPAN_ATTRIBUTES: "tuple[SpanAttribute, ...]" = (
     _row("cogno.usage.cost_usd", _MODEL, float, "cogno", lambda r: r.cost_usd,
          "the ledger row's provider cost, when the host carries it"),
     _row("cogno.timing", SPAN_KINDS, str, "cogno", lambda r: r.timing,
-         "observed | anchored | unmeasured: how the span's interval was obtained"),
+         "observed, anchored or unmeasured: how the span's interval was obtained"),
     _row("cogno.tenant.id", (TURN,), str, "cogno", lambda r: r.tenant,
          "the tenant: only a UUID or a token, otherwise omitted"),
     _row("cogno.turn.route", (TURN,), str, "cogno", lambda r: r.route, "the ID stage's route"),

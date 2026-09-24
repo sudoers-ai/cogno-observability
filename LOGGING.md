@@ -12,7 +12,8 @@ contexto de tenant). Regras:
 3. Níveis:
    - **ERROR**  → nunca aqui; erro fatal vira exceção e propaga.
    - **WARNING**→ condição recuperada/tratada: `record()` falhou (best-effort,
-     observabilidade nunca quebra o turno), instrumentação HTTP pulada (extra
+     observabilidade nunca quebra o turno — no sink de traços só com a CLASSE da
+     excepção, porque a mensagem pode trazer o valor que a causou), instrumentação HTTP pulada (extra
      `[http]` ausente), `PROMETHEUS_MULTIPROC_DIR` inexistente.
    - **INFO**   → marco raro: `event=metrics_mounted`, `event=http_instrumented`.
      NÃO por-turno (o `record()` é hot-path — silencioso).
@@ -29,6 +30,7 @@ para o log — não duplicar (o log é para eventos de plumbing, não para telem
 | Logger | Evento | Nível |
 |---|---|---|
 | `cogno_observability.sink` | `metrics_record_failed` (record deu erro — engolido) | WARNING |
+| `cogno_observability.tracing` | `trace_record_failed` (spans não emitidos — engolido; só a classe do erro) | WARNING |
 | `cogno_observability.instrument` | `metrics_mounted` / `http_instrumented` | INFO |
 | `cogno_observability.instrument` | `http_instrument_skipped` (sem o extra `[http]`) | WARNING |
 | `cogno_observability.instrument` | `multiproc_dir_missing` | WARNING |

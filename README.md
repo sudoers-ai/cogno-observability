@@ -4,7 +4,7 @@
 
 Where [`cogno-anima`](https://github.com/sudoers-ai/cogno-anima) is the *mind* and [`cogno-homeo`](https://github.com/sudoers-ai/cogno-homeo) keeps the calls *alive*, `cogno-observability` is the **operator's eyes** on the running fleet — how many turns, how fast, how much they cost, where they fail. It attaches to the host from *outside* its cognition, so the host never imports `prometheus_client`.
 
-> Status: **alpha** — metrics sink + `/metrics` wiring + deploy stack + unit/contract suite in place.
+> Status: **alpha** — metrics sink + `/metrics` wiring + deploy stack + optional OpenTelemetry trace sink + unit/contract suite in place.
 
 SRE/Ops monitoring is the *operator-facing* pillar — cross-tenant fleet health — and is
 deliberately **separate** from two other consumers of the same turn data:
@@ -36,6 +36,7 @@ logs for per-turn tracing. `tenant` is opt-in and capped (`PrometheusMetricsSink
 ```bash
 pip install cogno-observability            # core (prometheus-client)
 pip install "cogno-observability[http]"    # + per-route HTTP RED metrics (fastapi instrumentator)
+pip install "cogno-observability[otel]"    # + the OpenTelemetry trace sink (API + SDK; exporter is yours)
 ```
 
 ## Wire it into the host
@@ -70,6 +71,26 @@ With neither argument the host runs exactly as before (no-op sink, no `/metrics`
 | `cogno_blocked_total` | counter | stop_reason | safety/quota/PII blocks |
 
 Plus HTTP RED metrics (`http_request_*`) from the instrumentator.
+
+## Traces — OpenTelemetry, GenAI conventions (optional)
+
+`OTelTraceSink` takes the same `record(TurnEvent)` and emits one `invoke_agent` span per turn, with
+one `chat`/`embeddings` span per **row of the host's token ledger** (so the spans carry the ledger's
+tokens, by construction) and one `execute_tool` span per tool call beneath it. Names and attributes
+follow the [OpenTelemetry GenAI semantic conventions](https://github.com/open-telemetry/semantic-conventions-genai)
+at the commit named in `SEMCONV_REF` (no tagged release exists yet; status *Development*), so
+Langfuse, Phoenix, Grafana Tempo or any OTLP backend can read them.
+
+- **Metadata only.** Models, tokens, cost, times and outcome codes. The sink never reads the
+  message, the prompt, the reply, tool arguments or results, error text, `identity_id` or
+  `session_id`. `SPAN_ATTRIBUTES` is at once the allowlist and the emitter, and every string value
+  must be a token (no spaces, no `@`, no run of ten digits) or it becomes `_OTHER`.
+- **Off by default, free when off.** The library reads no environment and knows no endpoint.
+  The host passes its own `TracerProvider`. Importing this package never imports `opentelemetry`.
+- **Times are never invented.** `cogno.timing` = `observed` / `anchored` / `unmeasured`.
+
+The attribute table, the fields the host carries today and the ones its wiring adds, and the
+limits are in [`docs/HOST_INTEGRATION.md`](docs/HOST_INTEGRATION.md#traces-oteltracesink-opentelemetry-genai-conventions).
 
 ## Multi-worker
 

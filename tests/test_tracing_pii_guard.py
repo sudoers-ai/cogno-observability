@@ -59,6 +59,8 @@ def _laden_turn() -> Event:
             Stage(EMAIL, model=EMAIL, provider=PHONE, tokens_in=3, tokens_out=1,
                   served_model="Ana Teste"),
             Stage(PHONE, model=f"+55 11 {PHONE}", embedding_tokens=4),
+            # a phone behind a letter prefix: a token by shape, refused by the digit-run rule
+            Stage("ner", model=f"wa:{PHONE}", provider=f"wa:{PHONE}", tokens_in=1),
         ],
         tools=[
             Tool("notify_user", ok=True,
@@ -67,6 +69,7 @@ def _laden_turn() -> Event:
                  result=f"sent to {EMAIL}; CPF 123.456.789-09; Rua das Flores, 10"),
             Tool(f"send to {EMAIL}", ok=False, error=f"{PHONE} rejected"),
             Tool(PHONE, ok=False, error="Rua das Flores"),
+            Tool(f"wa:{PHONE}", ok=True),
         ],
     )
 
@@ -80,8 +83,8 @@ def spans():
     # Prove the condition happened before reading the verdict: a turn with every kind of span,
     # the bad names included. An empty export would pass everything below.
     ops = sorted(s.attributes["gen_ai.operation.name"] for s in out)
-    assert ops == ["chat", "chat", "embeddings", "execute_tool", "execute_tool", "execute_tool",
-                   "invoke_agent"], ops
+    assert ops == ["chat", "chat", "chat", "embeddings", "execute_tool", "execute_tool",
+                   "execute_tool", "execute_tool", "invoke_agent"], ops
     return out
 
 

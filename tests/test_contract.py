@@ -49,3 +49,66 @@ def test_sink_reads_every_field_the_host_provides():
     e = cogno_host.TurnEvent(tenant_id="acme", session_id="s1")
     for field in TurnEventLike.__annotations__:
         assert hasattr(e, field), f"host TurnEvent is missing '{field}' the sink reads"
+
+
+# ── the trace sink: what the host carries TODAY, and what its wiring still has to add ──────────
+#: The fields ``tracing.py`` reads that the host does not carry yet. They are read with defaults,
+#: so today a real ``TurnEvent`` produces spans without them: no tool spans, no row cost, and
+#: children ``anchored`` at the turn's start. This set is the host wiring's to-do list, written
+#: where a test can check it. A field that leaves this set because the host added it keeps
+#: passing (the check is an inclusion). A field the host REMOVES fails, which is the drift that
+#: #7 was.
+_AWAITING_HOST_WIRING = {
+    "turn": {"started_at", "tools"},
+    "stage": {"provider", "served_model", "cost_usd", "embedding_cost_usd", "attempt",
+              "started_at"},
+}
+
+
+def test_the_host_carries_every_traced_field_but_the_ones_its_wiring_will_add():
+    from cogno_observability.tracing import INPUT_FIELDS
+
+    turn = set(cogno_host.TurnEvent.__dataclass_fields__)
+    stage = set(cogno_host.StageSample.__dataclass_fields__)
+    assert set(INPUT_FIELDS["turn"]) - _AWAITING_HOST_WIRING["turn"] <= turn, \
+        sorted(set(INPUT_FIELDS["turn"]) - _AWAITING_HOST_WIRING["turn"] - turn)
+    assert set(INPUT_FIELDS["stage"]) - _AWAITING_HOST_WIRING["stage"] <= stage, \
+        sorted(set(INPUT_FIELDS["stage"]) - _AWAITING_HOST_WIRING["stage"] - stage)
+
+
+def test_the_tool_fields_are_the_cores_own_names():
+    """``tool``/``ok`` are read under the names of the core's ``ToolExecution``, so the host can
+    hand the executions over as they are. Everything else on that record (``arguments``,
+    ``result``, the ``error`` text) is content and is never read."""
+    types = pytest.importorskip("cogno_anima.types", reason="cogno-anima not installed")
+    from cogno_observability.tracing import INPUT_FIELDS
+
+    fields = set(types.ToolExecution.model_fields)
+    assert set(INPUT_FIELDS["tool"]) - {"elapsed_ms", "started_at"} <= fields
+
+
+def test_a_real_turnevent_drives_the_trace_sink_end_to_end():
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+    from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+
+    from cogno_observability import OTelTraceSink
+
+    exporter = InMemorySpanExporter()
+    provider = TracerProvider()
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+    e = cogno_host.TurnEvent(
+        tenant_id="acme", session_id="s1", identity_id="5511900000000", route="EGO",
+        stop_reason="completed", elapsed_ms=1200.0, cost_usd=0.002,
+        stages=[cogno_host.StageSample(stage="ner", model="gpt-4o-mini", tokens_in=10,
+                                       tokens_out=5, cached_tokens=4, elapsed_ms=200.0),
+                cogno_host.StageSample(stage="id", model="heuristic", embedding_tokens=7)])
+    OTelTraceSink(provider, clock=lambda: 10**18).record(e)
+    spans = {s.attributes["gen_ai.operation.name"]: s for s in exporter.get_finished_spans()}
+    assert set(spans) == {"invoke_agent", "chat", "embeddings"}
+    assert spans["chat"].attributes["gen_ai.usage.input_tokens"] == 10
+    assert spans["chat"].attributes["gen_ai.usage.output_tokens"] == 5
+    assert spans["chat"].attributes["gen_ai.usage.cache_read.input_tokens"] == 4
+    assert spans["embeddings"].attributes["gen_ai.usage.input_tokens"] == 7
+    assert not any("5511900000000" in str(v) for s in spans.values()
+                   for v in s.attributes.values())
