@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "cogno-observability"
 version = "0.1.0"
-description = "SRE/Ops monitoring for the Cogno stack — Prometheus metrics sink + /metrics wiring + Grafana dashboards/alerts. Cross-tenant fleet health (NOT the tenant-facing Radar Tokens; NOT billing)."
+description = "SRE/Ops monitoring for the Cogno stack — Prometheus metrics sink + /metrics wiring + Grafana dashboards/alerts, and an optional OpenTelemetry trace sink in the GenAI conventions (metadata only). Cross-tenant fleet health (NOT the tenant-facing Radar Tokens; NOT billing)."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "Apache-2.0" }
@@ -19,6 +19,11 @@ dependencies = [
 # The FastAPI HTTP-layer instrumentation (RED metrics per route) is optional: the business
 # metrics (per-turn TurnEvent) work without it.
 http = ["prometheus-fastapi-instrumentator>=7.0"]
+# The OpenTelemetry trace sink (``OTelTraceSink``) is optional too: importing this package never
+# imports ``opentelemetry``. The sink needs only the API. The SDK is here because a host needs a
+# ``TracerProvider`` to hand it. The EXPORTER (OTLP, console, a vendor's) is the host's choice and
+# is not pinned here.
+otel = ["opentelemetry-api>=1.25", "opentelemetry-sdk>=1.25"]
 dev = [
     "pytest>=8",
     "pytest-asyncio>=0.23",
@@ -26,6 +31,8 @@ dev = [
     "prometheus-fastapi-instrumentator>=7.0",
     "fastapi>=0.110",
     "httpx>=0.27",
+    "opentelemetry-api>=1.25",
+    "opentelemetry-sdk>=1.25",
     "ruff>=0.5",
     "mypy>=1.8",
 ]
