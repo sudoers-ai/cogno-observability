@@ -112,3 +112,41 @@ def test_a_real_turnevent_drives_the_trace_sink_end_to_end():
     assert spans["embeddings"].attributes["gen_ai.usage.input_tokens"] == 7
     assert not any("5511900000000" in str(v) for s in spans.values()
                    for v in s.attributes.values())
+
+
+def test_the_model_spans_are_the_host_ledgers_rows():
+    """The ledger twin against the REAL ledger: the host's own ``events_from_context`` over a
+    context, and this library's spans over the ``TurnEvent`` the host's own ``_turn_metrics``
+    builds from that same context. The two must be the same rows, in the same order, with the
+    same tokens. If the host changes how it splits a stage into ledger rows, this fails here
+    instead of leaving the spans quietly disagreeing with the invoice."""
+    metering = pytest.importorskip("cogno_host.metering")
+    service = pytest.importorskip("cogno_host.service")
+    types = pytest.importorskip("cogno_anima.types")
+    from cogno_meter import PriceBook
+
+    from cogno_observability import plan_spans
+
+    turn_metrics = getattr(service, "_turn_metrics", None)
+    assert turn_metrics is not None, "cogno_host.service._turn_metrics moved: re-point this twin"
+
+    def sm(stage, model, **kw):
+        return types.StageMetrics(stage=stage, model=model, elapsed_ms=10.0, **kw)
+
+    ctx = types.PipelineContext(user_input="-", retry_metrics=[
+        sm("noumeno", "gpt-4o-mini", tokens_in=900, tokens_out=60, embedding_tokens=30),
+        sm("ner", "gpt-4o-mini", tokens_in=1200, tokens_out=150),
+        sm("id", "heuristic", tokens_in=0, tokens_out=0, embedding_tokens=12),
+        sm("ego", "gpt-4o-mini", tokens_in=2500, tokens_out=80, cached_tokens=2048),
+        sm("superego_voice", "gpt-4o-mini", tokens_in=1500, tokens_out=120),
+    ])
+    ledger = metering.events_from_context(ctx, tenant_id="acme", period="2026-09",
+                                          book=PriceBook.default())
+    event = cogno_host.TurnEvent(tenant_id="acme", session_id="s1",
+                                 stages=turn_metrics(ctx)["stages"])
+    spans = [p for p in plan_spans(event, now_ns=10**18) if p.kind in ("chat", "embeddings")]
+    assert len(ledger) == 6, "the ledger split changed shape: re-read events_from_context"
+    assert [(e.stage, "chat" if e.modality == "llm" else "embeddings", e.tokens_in, e.tokens_out)
+            for e in ledger] == \
+        [(p.attributes["cogno.stage"], p.kind, p.attributes["gen_ai.usage.input_tokens"],
+          p.attributes.get("gen_ai.usage.output_tokens", 0)) for p in spans]

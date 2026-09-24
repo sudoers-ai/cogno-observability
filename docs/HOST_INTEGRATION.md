@@ -124,6 +124,12 @@ cost. The turn's own total is `cogno.turn.cost_usd`, a different key, so it is n
 twice. **One span per ledger row, not per provider call:** the EGO adds up the calls of its agent
 loop into one row per attempt, so an EGO attempt is one span.
 
+This is checked against the real ledger, not against a copy of its rule.
+`tests/test_contract.py::test_the_model_spans_are_the_host_ledgers_rows` runs the host's own
+`events_from_context` and the host's own `_turn_metrics` over the same context, and requires the
+same rows, in the same order, with the same tokens. It auto-skips where `cogno-host` is not
+installed, as the rest of that file does.
+
 ### Times are never invented
 
 `cogno.timing` says how each interval was obtained:
