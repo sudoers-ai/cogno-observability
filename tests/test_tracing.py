@@ -141,6 +141,14 @@ def test_the_turn_ends_at_the_record_instant_and_lasts_elapsed_ms():
     assert turn.attributes["cogno.timing"] == "anchored"
 
 
+def test_an_early_exit_with_no_duration_is_an_unmeasured_turn_not_a_measured_zero():
+    """The host's early exits (a disabled tenant, a blocked input) call its ``_done`` with no
+    ``elapsed``, so ``elapsed_ms`` is 0 there."""
+    (turn,) = plan_spans(Event(blocked=True, stop_reason="identity_disabled"), now_ns=NOW_NS)
+    assert turn.start_ns == turn.end_ns == NOW_NS
+    assert turn.attributes["cogno.timing"] == "unmeasured"
+
+
 def test_a_turn_with_started_at_is_observed():
     (turn,) = plan_spans(Event(elapsed_ms=1500.0, started_at=1_600_000_000.25), now_ns=NOW_NS)
     assert turn.start_ns == 1_600_000_000_250_000_000

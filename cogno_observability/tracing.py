@@ -47,7 +47,9 @@ need a finer ledger first.
 
 The turn span is ``observed`` when the event carries ``started_at``. Otherwise it is
 ``anchored``: it ENDS at the instant :meth:`OTelTraceSink.record` is called, which the host does
-at the very end of the turn, and it lasts ``elapsed_ms``.
+at the very end of the turn, and it lasts ``elapsed_ms``. It is ``unmeasured`` when the event
+carries no duration: the host's early exits (a disabled tenant or contact, a blocked input)
+record none.
 
 **Off by default, and free when off.** Importing this package, and running :func:`plan_spans`,
 imports nothing from ``opentelemetry``. The API is imported when an :class:`OTelTraceSink` is
@@ -417,13 +419,18 @@ def plan_spans(event: Any, *, embedding_model: str = "", now_ns: Optional[int] =
     end_ns = int(now_ns if now_ns is not None else time.time_ns())
 
     # ── the turn ──
-    elapsed = _float(getattr(event, "elapsed_ms", 0.0)) or 0.0
+    elapsed = max(_float(getattr(event, "elapsed_ms", 0.0)) or 0.0, 0.0)
     observed_start = _epoch_ns(getattr(event, "started_at", None))
     if observed_start is not None:
         t_start = observed_start
-        t_end, t_timing = t_start + int(max(elapsed, 0.0) * 1e6), "observed"
+        t_end, t_timing = t_start + int(elapsed * 1e6), "observed"
     else:
-        t_start, t_end, t_timing = end_ns - int(max(elapsed, 0.0) * 1e6), end_ns, "anchored"
+        t_start, t_end, t_timing = end_ns - int(elapsed * 1e6), end_ns, "anchored"
+    if elapsed <= 0:
+        # The host's early exits (a disabled tenant or contact, a blocked input) record no
+        # duration at all. A zero-length span is then the truth about the MEASUREMENT, and the
+        # label says so rather than calling it a measured zero.
+        t_timing = "unmeasured"
     ok = bool(getattr(event, "ok", True))
     error_class = _token(getattr(event, "error", "")) if not ok else None
     turn = _Row(

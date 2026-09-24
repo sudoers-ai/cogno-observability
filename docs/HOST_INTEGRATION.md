@@ -137,7 +137,9 @@ installed, as the rest of that file does.
 - `observed`: the host gave `started_at` (epoch seconds) and the duration was measured.
 - `anchored`: the duration was measured but there is no start, so the span starts at the turn's
   start. The turn span itself, when it is `anchored`, ends when `record` is called.
-- `unmeasured`: there is no duration either, so the span is zero-length at its anchor.
+- `unmeasured`: there is no duration either, so the span is zero-length at its anchor. That
+  includes a turn span whose event carries no `elapsed_ms`: the host's early exits (a disabled
+  tenant or contact, a blocked input) record none.
 
 ### What the host carries today, and what its wiring adds
 
