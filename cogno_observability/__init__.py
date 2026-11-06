@@ -26,4 +26,4 @@ from cogno_observability.tracing import (ALLOWED_ATTRIBUTE_KEYS, SEMCONV_REF, SP
 __all__ = ["PrometheusMetricsSink", "attach", "Metrics", "TurnEventLike",
            "OTelTraceSink", "plan_spans", "PlannedSpan", "SPAN_ATTRIBUTES",
            "ALLOWED_ATTRIBUTE_KEYS", "SEMCONV_REF"]
-__version__ = "0.1.0"
+__version__ = "0.1.1"
