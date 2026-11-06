@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.1 — 2026-11-06 — release to PyPI of the changes below
+
+Publishes every «Unreleased» entry below, merged since 0.1.0. No change of its own.
+
 ## Unreleased
 
 ### Added
